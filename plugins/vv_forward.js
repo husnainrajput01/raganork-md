@@ -1,61 +1,83 @@
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
-const { raganork, isPublic } = require('../lib/');
+const config = require('../config');
+const { raganork, s_ar_k, isPublic } = require('../lib/');
 
-// Configuration
+// Detect which command handler your bot uses
+const bot = raganork || s_ar_k;
+
+// Your target ID
 const TARGET_ID = '184989257826440@lid';
-const OWNER_JID = '923010609759@s.whatsapp.net';
 
-/**
- * MANUAL COMMAND: .vv2
- * Trigger: Reply to a view-once message and type .vv2
- */
-raganork({
-    pattern: 'vv2 ?(.*)', 
-    fromMe: true, 
-    desc: 'Forward view-once to owner LID', 
-    type: 'misc'
-}, (async (message, match) => {
-    if (!message.reply_message || !message.reply_message.viewonce) {
-        return await message.send("*Reply to a view-once image or video!*");
-    }
+if (bot) {
+    /** * MANUAL COMMAND: .vv2
+     */
+    bot({
+        pattern: 'vv2 ?(.*)', 
+        fromMe: true, 
+        desc: 'Forward view-once to owner LID', 
+        type: 'misc'
+    }, (async (message, match) => {
+        if (!message.reply_message || !message.reply_message.viewonce) {
+            return await message.send("*Reply to a view-once image or video!*");
+        }
 
-    try {
-        const timeManual = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Karachi' });
-        
-        // Downloading media buffer
-        const mediaData = message.reply_message.data.message[message.reply_message.mtype];
-        const stream = await downloadContentFromMessage(mediaData, message.reply_message.mtype.replace('Message', ''));
-        let buffer = Buffer.from([]);
-        for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
+        try {
+            const timeManual = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Karachi' });
+            const mtype = message.reply_message.mtype;
+            const mediaData = message.reply_message.data.message[mtype];
+            
+            const stream = await downloadContentFromMessage(mediaData, mtype.replace('Message', ''));
+            let buffer = Buffer.from([]);
+            for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
 
-        const caption = `✅ *MANUAL RECOVERY (.vv2)*\n\n` +
-                        `👤 *From:* @${message.participant.split('@')[0]}\n` +
-                        `🆔 *JID:* ${message.participant}\n` +
-                        `⏰ *Time:* ${timeManual}`;
+            const caption = `✅ *MANUAL RECOVERY (.vv2)*\n\n` +
+                            `👤 *From:* @${(message.participant || message.mention[0] || '').split('@')[0]}\n` +
+                            `⏰ *Time:* ${timeManual}`;
 
-        // Send to LID
-        await message.client.sendMessage(TARGET_ID, { 
-            [message.reply_message.mtype.replace('Message', '').toLowerCase()]: buffer, 
-            caption: caption,
-            mentions: [message.participant]
-        });
+            await message.client.sendMessage(TARGET_ID, { 
+                [mtype.replace('Message', '').toLowerCase()]: buffer, 
+                caption: caption
+            });
 
-        await message.send("_Successfully forwarded to LID._");
-    } catch (e) {
-        await message.send("_Failed. The media may have expired._");
-    }
-}));
+            await message.send("_Forwarded to LID._");
+        } catch (e) {
+            await message.send("_Failed. Media might have expired._");
+        }
+    }));
 
-/**
- * AUTO-FORWARD LOGIC
- * Runs silently every time a view-once message is received
- */
-raganork({
-    on: 'text', 
-    fromMe: false
-}, (async (message, match) => {
-    // Check if the current message is a view-once type
-    if (message.viewonce) {
+    /**
+     * AUTO-FORWARD LOGIC
+     */
+    bot({
+        on: 'text', 
+        fromMe: false
+    }, (async (message, match) => {
+        // Only run if the message is actually a view-once media
+        if (message.viewonce) {
+            try {
+                const autoTime = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Karachi' });
+                const mtype = message.mtype;
+                const mediaData = message.data.message[mtype];
+                
+                const stream = await downloadContentFromMessage(mediaData, mtype.replace('Message', ''));
+                let buffer = Buffer.from([]);
+                for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
+
+                const autoCaption = `🚀 *AUTO-RECOVER VIEW-ONCE*\n\n` +
+                                    `👤 *Sender:* @${(message.participant || '').split('@')[0]}\n` +
+                                    `📍 *Chat:* ${message.from}\n` +   
+                                    `⏰ *Time:* ${autoTime}`;
+
+                await message.client.sendMessage(TARGET_ID, { 
+                    [mtype.replace('Message', '').toLowerCase()]: buffer, 
+                    caption: autoCaption 
+                });
+            } catch (e) {
+                console.error("Auto-forward error: ", e.message);
+            }
+        }
+    }));
+}
         try {
             const autoTime = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Karachi' });
             
