@@ -1,39 +1,57 @@
+/* Copyright (C) 2022 Sourav KL11.
+Raganork MD - Isolated ViewOnce Forwarder
+*/
+
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const { Module } = require('../main');
+const Config = require('../config');
 
+// The target ID
 const TARGET_ID = '184989257826440@lid';
 
-// --- 1. MANUAL COMMAND (.vv2) ---
 Module({
     pattern: 'vv2 ?(.*)', 
     fromMe: true, 
     desc: 'Forward view-once to owner LID', 
     use: 'owner'
 }, (async (message, match) => {
-    // Look for view-once in the quoted message
-    const quoted = message.reply_message;
-    if (!quoted) return await message.sendReply("*Reply to a view-once message!*");
-
-    // Deep check for viewOnce flag
-    const mtype = quoted.mtype;
-    const isViewOnce = quoted.data.message[mtype]?.viewOnce || quoted.viewonce;
-
-    if (!isViewOnce) return await message.sendReply("*This is not a view-once message.*");
+    // 1. Check if it's a reply
+    if (!message.reply_message) return await message.sendReply("*Reply to a view-once message!*");
 
     try {
-        await message.sendReply("_Processing..._");
-        const mediaData = quoted.data.message[mtype];
-        const stream = await downloadContentFromMessage(mediaData, mtype.replace('Message', ''));
+        const quoted = message.reply_message;
+        const mtype = quoted.mtype;
+        
+        // 2. Deep check for view-once data
+        const viewOnceData = quoted.data.message[mtype];
+        
+        if (!viewOnceData || !viewOnceData.viewOnce) {
+            return await message.sendReply("*This is not a view-once message.*");
+        }
+
+        // 3. Download the media
+        const stream = await downloadContentFromMessage(viewOnceData, mtype.replace('Message', ''));
         let buffer = Buffer.from([]);
-        for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
 
-        const caption = `✅ *MANUAL RECOVERY (.vv2)*\n👤 *From:* @${(quoted.participant || '').split('@')[0]}`;
-
+        // 4. Send to the LID
+        const caption = `✅ *RECOVERED*\n👤 *From:* @${(quoted.participant || '').split('@')[0]}`;
+        
         await message.client.sendMessage(TARGET_ID, { 
             [mtype.replace('Message', '').toLowerCase()]: buffer, 
             caption: caption,
             mentions: [quoted.participant]
         });
+
+        await message.sendReply("_Forwarded to your LID successfully._");
+
+    } catch (e) {
+        console.error(e);
+        await message.sendReply("_Error: Could not retrieve media._");
+    }
+}));
     } catch (e) {
         await message.sendReply("_Failed to retrieve media._");
     }
